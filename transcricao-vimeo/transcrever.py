@@ -1,306 +1,249 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Transcritor de videos do Vimeo (curso / area de membros).
+Transcritor dos videos do Vimeo - ARQUIVO UNICO (nao precisa de mais nada).
 
-O que ele faz, para cada video da lista videos.json:
-  1) Baixa SOMENTE o audio usando yt-dlp, autenticando com o SEU acesso
-     (cookies do navegador onde voce assiste, e/ou o dominio do curso).
-  2) Transcreve o audio em portugues.
-  3) Salva um .txt (texto corrido) e um .srt (com tempos) na pasta 'transcricoes/'.
+COMO USAR (Windows):
+  1) Salve este arquivo (transcrever.py) em qualquer lugar (ex.: Downloads).
+  2) Abra o Prompt de Comando (tecla Windows, digite  cmd , Enter).
+  3) Cole a linha abaixo e aperte Enter:
 
-Ele pula videos ja transcritos, entao voce pode parar e rodar de novo quando quiser.
+        python "%USERPROFILE%\\Downloads\\transcrever.py"
 
---------------------------------------------------------------------------------
-COMO USAR (resumo -- detalhes no README.md):
+  Pronto. Ele instala sozinho o que falta, baixa o audio de cada video
+  (usando o seu acesso) e transcreve em portugues. Os resultados ficam em:
+        C:\\Users\\SEU-USUARIO\\transcricoes-vimeo
 
-  1. Instale as dependencias:
-        pip install -r requirements.txt
-     E instale o ffmpeg (necessario para extrair audio):
-        - Windows:  winget install Gyan.FFmpeg    (ou baixe em ffmpeg.org)
-        - Mac:      brew install ffmpeg
-        - Linux:    sudo apt install ffmpeg
-
-  2. Configure o acesso (escolha UMA das formas abaixo), via variavel de ambiente:
-
-     a) Cookies do navegador onde voce assiste ao curso (mais simples p/ aluno):
-            COOKIES_FROM_BROWSER=chrome     (ou firefox, edge, brave, safari...)
-
-     b) Dominio do curso (se o video for "restrito por dominio"):
-            COURSE_REFERER=https://site-do-curso.com.br
-
-     c) Senha do video (se for video protegido por senha):
-            VIMEO_PASSWORD=a-senha
-
-     Voce pode combinar (ex.: cookies + referer). O ideal e comecar so com cookies.
-
-  3. Rode:
-        python transcrever.py
-
---------------------------------------------------------------------------------
-MOTOR DE TRANSCRICAO (padrao: faster-whisper, roda no seu PC, de graca):
-
-     WHISPER_MODEL=small        tamanho do modelo local: tiny|base|small|medium|large-v3
-                                (maior = mais preciso, porem mais lento)
-
-     Para usar a API da OpenAI (paga, porem rapida e sem pesar no PC):
-        MOTOR=openai
-        OPENAI_API_KEY=sk-...
-
-Exemplo completo (Linux/Mac):
-     COOKIES_FROM_BROWSER=chrome WHISPER_MODEL=medium python transcrever.py
+  Dica: mantenha o navegador do curso ABERTO e LOGADO enquanto roda.
+        Pode fechar e rodar de novo quando quiser - ele pula os ja feitos.
 """
 
-import json
-import os
-import re
+import importlib
 import subprocess
 import sys
+import re
 import unicodedata
 from pathlib import Path
 
-# ------------------------------------------------------------------ configuracao
-BASE_DIR   = Path(__file__).resolve().parent
-VIDEOS     = BASE_DIR / "videos.json"
-AUDIO_DIR  = BASE_DIR / "audios"          # audios baixados (temporarios)
-OUT_DIR    = BASE_DIR / "transcricoes"    # resultados (.txt e .srt)
+# =====================================================================
+# CONFIGURACAO  (mexa aqui so se precisar)
+# =====================================================================
+REFERER        = "https://membros.clubedosanfitrioes.com.br"
+WHISPER_MODEL  = "small"     # tiny | base | small | medium | large-v3  (maior = melhor e mais lento)
+IDIOMA         = "pt"
+VIMEO_PASSWORD = ""          # preencha entre as aspas SO se o video pedir senha
+PASTA_SAIDA    = Path.home() / "transcricoes-vimeo"
 
-COOKIES_FROM_BROWSER = os.environ.get("COOKIES_FROM_BROWSER", "").strip()
-COURSE_REFERER       = os.environ.get("COURSE_REFERER", "").strip()
-VIMEO_PASSWORD       = os.environ.get("VIMEO_PASSWORD", "").strip()
+# Ordem em que ele tenta acessar cada video (para na primeira que funcionar):
+#  - so o referer do curso
+#  - cookies do navegador (caso o video exija login)
+ESTRATEGIAS = [
+    {"nome": "referer",        "cookies": None},
+    {"nome": "cookies chrome", "cookies": "chrome"},
+    {"nome": "cookies edge",   "cookies": "edge"},
+    {"nome": "cookies firefox","cookies": "firefox"},
+    {"nome": "cookies brave",  "cookies": "brave"},
+]
 
-MOTOR          = os.environ.get("MOTOR", "faster-whisper").strip().lower()
-WHISPER_MODEL  = os.environ.get("WHISPER_MODEL", "small").strip()
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "").strip()
-IDIOMA         = os.environ.get("IDIOMA", "pt").strip()
-MANTER_AUDIO   = os.environ.get("MANTER_AUDIO", "").strip() not in ("", "0", "false", "no")
+# =====================================================================
+# LISTA DOS VIDEOS
+# =====================================================================
+VIDEOS = [
+    (1,  "Secao 1 - Raio-X",   "Quando iniciar um processo de otimizacao",                 "806942000"),
+    (2,  "Secao 1 - Raio-X",   "Por que alguns anuncios nao performam",                    "802849600"),
+    (3,  "Secao 1 - Raio-X",   "Checklist do Raio-X",                                      "809736931"),
+    (4,  "Secao 2 - Pilares",  "Visual - o pilar da atencao",                              "802814991"),
+    (5,  "Secao 2 - Pilares",  "Avaliacoes - o pilar da confianca",                        "802822004"),
+    (6,  "Secao 2 - Pilares",  "Parametrizacao - o pilar do algoritmo",                    "802305708"),
+    (7,  "Secao 2 - Pilares",  "Textual - o pilar da narrativa",                           "802306073"),
+    (8,  "Secao 2 - Pilares",  "Textual - o pilar da narrativa com ajuda de IA",           "802307243"),
+    (9,  "Secao 3 - Bonus",    "Guia da casa",                                             "554916682"),
+    (10, "Secao 3 - Bonus",    "Analise de anuncios (encontro do Clube)",                  "799854841"),
+    (12, "Secao 3 - Bonus",    "10 erros no Instagram",                                    "693740184"),
+    (13, "Secao 4 - Acelerador","Introducao",                                              "678839301"),
+    (14, "Secao 4 - Acelerador","Estrategia de partida",                                   "678849732"),
+    (15, "Secao 4 - Acelerador","Fotografia - parte 1",                                    "678853379"),
+    (16, "Secao 4 - Acelerador","Fotografia - parte 2",                                    "680146034"),
+    (17, "Secao 4 - Acelerador","Legenda",                                                 "678854158"),
+    (18, "Secao 4 - Acelerador","Titulo",                                                  "678854796"),
+    (19, "Secao 4 - Acelerador","Resumo",                                                  "678859388"),
+    (20, "Secao 4 - Acelerador","Descricao de espaco e preenchimento de secoes",           "678860179"),
+    (21, "Secao 4 - Acelerador","Reservas instantaneas",                                   "678869249"),
+    (22, "Secao 4 - Acelerador","Avaliacoes",                                              "678871739"),
+    (23, "Secao 4 - Acelerador","Politica de Cancelamento",                                "678872663"),
+    (24, "Secao 4 - Acelerador","Deposito de seguranca",                                   "680399656"),
+    (25, "Secao 4 - Acelerador","Regras da casa",                                          "680398866"),
+    (26, "Secao 4 - Acelerador","Idioma",                                                  "678876075"),
+    (27, "Secao 4 - Acelerador","Numero minimo de diarias e faturamento",                  "678878190"),
+    (28, "Secao 4 - Acelerador","Perfil do anfitriao",                                     "678878592"),
+    (29, "Secao 4 - Acelerador","Tempo de resposta",                                       "678878775"),
+    (30, "Secao 4 - Acelerador","Recusa de reserva",                                       "678879199"),
+    (31, "Secao 4 - Acelerador","Atualizacao de calendario, preco e preco competitivo",    "678880506"),
+    (32, "Secao 4 - Acelerador","Favoritos",                                               "678882281"),
+    (33, "Secao 4 - Acelerador","Taxa de conversao",                                       "678883375"),
+    (34, "Secao 4 - Acelerador","Cancelamento",                                            "678883774"),
+    (35, "Secao 4 - Acelerador","Superhost, palavras-chave e localizacao",                 "680137376"),
+    (36, "Secao 4 - Acelerador","Pets e hospedes de primeira viagem",                      "680137898"),
+    (37, "Secao 4 - Acelerador","Janela disponivel",                                       "680139396"),
+    (38, "Secao 4 - Acelerador","Fumantes",                                                "680139798"),
+    (39, "Secao 4 - Acelerador","Lugar para mais hospedes e descontos",                    "680141787"),
+    (40, "Secao 4 - Acelerador","Mudanca de estacao, anuncio travado e itens procurados",  "680144181"),
+]
 
 
-# ------------------------------------------------------------------ utilidades
-def log(msg):
-    print(msg, flush=True)
+# =====================================================================
+# INSTALACAO AUTOMATICA DAS DEPENDENCIAS
+# =====================================================================
+def garantir(pacote, modulo=None):
+    modulo = modulo or pacote
+    try:
+        return importlib.import_module(modulo)
+    except ImportError:
+        print(f"  instalando {pacote} (so na primeira vez, pode demorar)...", flush=True)
+        subprocess.check_call(
+            [sys.executable, "-m", "pip", "install", "--quiet", "--user", "--upgrade", pacote]
+        )
+        return importlib.import_module(modulo)
 
 
+# =====================================================================
+# UTILIDADES
+# =====================================================================
 def slug(texto):
-    """Transforma um titulo em nome de arquivo seguro."""
     texto = unicodedata.normalize("NFKD", texto).encode("ascii", "ignore").decode()
     texto = re.sub(r"[^\w\s-]", "", texto).strip().lower()
-    texto = re.sub(r"[\s_-]+", "-", texto)
-    return texto or "video"
+    return re.sub(r"[\s_-]+", "-", texto) or "video"
 
 
-def checar_ferramenta(nome, dica):
-    from shutil import which
-    if which(nome) is None:
-        log(f"[ERRO] '{nome}' nao encontrado. {dica}")
-        return False
-    return True
-
-
-def formatar_tempo_srt(segundos):
-    ms = int(round((segundos - int(segundos)) * 1000))
-    s = int(segundos)
-    h, s = divmod(s, 3600)
-    m, s = divmod(s, 60)
+def tempo_srt(seg):
+    ms = int(round((seg - int(seg)) * 1000))
+    s = int(seg); h, s = divmod(s, 3600); m, s = divmod(s, 60)
     return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
 
 
-# ------------------------------------------------------------------ download
-def baixar_audio(video_id, destino_base):
-    """
-    Baixa o audio de um video do Vimeo. Retorna o caminho do arquivo de audio
-    ou None em caso de falha. 'destino_base' e o caminho SEM extensao.
-    """
+# =====================================================================
+# DOWNLOAD DO AUDIO (tenta varias estrategias ate uma funcionar)
+# =====================================================================
+def baixar_audio(yt_dlp, video_id, destino_base):
     url = f"https://player.vimeo.com/video/{video_id}"
 
-    cmd = [
-        "yt-dlp",
-        "-f", "bestaudio/best",
-        "-x", "--audio-format", "mp3",     # extrai audio em mp3 (usa ffmpeg)
-        "--audio-quality", "5",
-        "--no-playlist",
-        "--retries", "5",
-        "--fragment-retries", "5",
-        "-o", str(destino_base) + ".%(ext)s",
-    ]
+    for est in ESTRATEGIAS:
+        opts = {
+            "format": "bestaudio/best",
+            "outtmpl": str(destino_base) + ".%(ext)s",
+            "http_headers": {"Referer": REFERER},
+            "referer": REFERER,
+            "noplaylist": True,
+            "quiet": True,
+            "no_warnings": True,
+            "ignoreerrors": False,
+        }
+        if est["cookies"]:
+            opts["cookiesfrombrowser"] = (est["cookies"],)
+        if VIMEO_PASSWORD:
+            opts["videopassword"] = VIMEO_PASSWORD
 
-    # Vimeo costuma exigir um Referer valido para videos embutidos.
-    referer = COURSE_REFERER or "https://vimeo.com"
-    cmd += ["--referer", referer]
+        try:
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                ydl.extract_info(url, download=True)
+        except Exception as e:  # noqa: BLE001
+            msg = str(e).splitlines()[0][:120]
+            print(f"      x tentativa '{est['nome']}' falhou: {msg}", flush=True)
+            continue
 
-    if COOKIES_FROM_BROWSER:
-        cmd += ["--cookies-from-browser", COOKIES_FROM_BROWSER]
-    if VIMEO_PASSWORD:
-        cmd += ["--video-password", VIMEO_PASSWORD]
-
-    cmd.append(url)
-
-    log(f"    baixando audio (id {video_id})...")
-    res = subprocess.run(cmd, capture_output=True, text=True)
-    if res.returncode != 0:
-        log("    [FALHA no download]")
-        # mostra so as ultimas linhas do erro para nao poluir
-        erro = (res.stderr or res.stdout or "").strip().splitlines()
-        for linha in erro[-6:]:
-            log(f"      > {linha}")
-        return None
-
-    esperado = Path(str(destino_base) + ".mp3")
-    if esperado.exists():
-        return esperado
-
-    # fallback: procura qualquer arquivo com esse prefixo
-    for p in AUDIO_DIR.glob(destino_base.name + ".*"):
-        return p
+        for p in destino_base.parent.glob(destino_base.name + ".*"):
+            print(f"      ok via '{est['nome']}'", flush=True)
+            return p
     return None
 
 
-# ------------------------------------------------------------------ transcricao
-_modelo_fw = None  # cache do modelo faster-whisper
+# =====================================================================
+# PRINCIPAL
+# =====================================================================
+def main():
+    print("=" * 68)
+    print("  Transcritor dos videos do Vimeo - Clube dos Anfitrioes")
+    print("=" * 68)
+    print("  Preparando o ambiente...")
 
-
-def transcrever_faster_whisper(audio_path):
-    global _modelo_fw
+    yt_dlp = garantir("yt-dlp", "yt_dlp")
+    fw     = garantir("faster-whisper", "faster_whisper")
     from faster_whisper import WhisperModel
 
-    if _modelo_fw is None:
-        log(f"    carregando modelo faster-whisper '{WHISPER_MODEL}' (primeira vez demora)...")
-        _modelo_fw = WhisperModel(WHISPER_MODEL, device="auto", compute_type="auto")
+    PASTA_SAIDA.mkdir(exist_ok=True)
+    tmp = PASTA_SAIDA / "_audio_temp"
+    tmp.mkdir(exist_ok=True)
 
-    segmentos, _info = _modelo_fw.transcribe(
-        str(audio_path),
-        language=IDIOMA,
-        vad_filter=True,       # ignora silencios longos
-        beam_size=5,
-    )
+    print(f"  Carregando o modelo de transcricao '{WHISPER_MODEL}' (primeira vez demora)...")
+    modelo = WhisperModel(WHISPER_MODEL, device="cpu", compute_type="int8")
 
-    texto_partes, srt_partes = [], []
-    for i, seg in enumerate(segmentos, start=1):
-        t = seg.text.strip()
-        texto_partes.append(t)
-        srt_partes.append(
-            f"{i}\n{formatar_tempo_srt(seg.start)} --> {formatar_tempo_srt(seg.end)}\n{t}\n"
-        )
-    return " ".join(texto_partes).strip(), "\n".join(srt_partes).strip()
+    total = len(VIDEOS)
+    ok = pulados = 0
+    falhas = []
 
-
-def transcrever_openai(audio_path):
-    from openai import OpenAI
-    client = OpenAI(api_key=OPENAI_API_KEY)
-
-    with open(audio_path, "rb") as f:
-        resp = client.audio.transcriptions.create(
-            model="whisper-1",
-            file=f,
-            language=IDIOMA,
-            response_format="verbose_json",
-        )
-
-    texto = (resp.text or "").strip()
-    srt_partes = []
-    for i, seg in enumerate(getattr(resp, "segments", []) or [], start=1):
-        # a resposta pode vir como objeto ou dict, dependendo da versao do SDK
-        start = seg["start"] if isinstance(seg, dict) else seg.start
-        end   = seg["end"]   if isinstance(seg, dict) else seg.end
-        t     = (seg["text"] if isinstance(seg, dict) else seg.text).strip()
-        srt_partes.append(
-            f"{i}\n{formatar_tempo_srt(start)} --> {formatar_tempo_srt(end)}\n{t}\n"
-        )
-    return texto, "\n".join(srt_partes).strip()
-
-
-def transcrever(audio_path):
-    if MOTOR == "openai":
-        if not OPENAI_API_KEY:
-            log("    [ERRO] MOTOR=openai mas OPENAI_API_KEY nao foi definida.")
-            return None, None
-        return transcrever_openai(audio_path)
-    return transcrever_faster_whisper(audio_path)
-
-
-# ------------------------------------------------------------------ principal
-def main():
-    log("=" * 70)
-    log("  Transcritor de videos do Vimeo")
-    log("=" * 70)
-
-    # checagens basicas
-    if not checar_ferramenta("yt-dlp", "Instale com: pip install -r requirements.txt"):
-        sys.exit(1)
-    if not checar_ferramenta("ffmpeg", "Instale o ffmpeg (veja o README.md)."):
-        sys.exit(1)
-
-    if not (COOKIES_FROM_BROWSER or COURSE_REFERER or VIMEO_PASSWORD):
-        log("")
-        log("  [AVISO] Nenhum acesso configurado (COOKIES_FROM_BROWSER / COURSE_REFERER /")
-        log("          VIMEO_PASSWORD). Videos privados provavelmente falharao com erro 403.")
-        log("          Veja o README.md. Continuando mesmo assim...")
-        log("")
-
-    videos = json.loads(VIDEOS.read_text(encoding="utf-8"))
-    AUDIO_DIR.mkdir(exist_ok=True)
-    OUT_DIR.mkdir(exist_ok=True)
-
-    total = len(videos)
-    ok, pulados, falhas = 0, 0, []
-
-    for idx, v in enumerate(videos, start=1):
-        n, titulo, vid, secao = v["n"], v["titulo"], v["id"], v.get("secao", "")
+    for i, (n, secao, titulo, vid) in enumerate(VIDEOS, start=1):
         nome = f"{n:02d}-{slug(titulo)}"
-        out_txt = OUT_DIR / f"{nome}.txt"
-        out_srt = OUT_DIR / f"{nome}.srt"
+        out_txt = PASTA_SAIDA / f"{nome}.txt"
+        out_srt = PASTA_SAIDA / f"{nome}.srt"
 
-        log("-" * 70)
-        log(f"[{idx}/{total}] #{n:02d} {titulo}")
+        print("-" * 68)
+        print(f"[{i}/{total}] #{n:02d} {titulo}")
 
         if out_txt.exists():
-            log("    ja transcrito -> pulando")
+            print("      ja transcrito -> pulando")
             pulados += 1
             continue
 
-        audio_base = AUDIO_DIR / nome
-        audio = baixar_audio(vid, audio_base)
+        audio = baixar_audio(yt_dlp, vid, tmp / nome)
         if audio is None:
-            falhas.append((n, titulo, "download"))
+            print("      >> NAO consegui baixar este video (verifique login/navegador)")
+            falhas.append((n, titulo))
             continue
 
         try:
-            log("    transcrevendo...")
-            texto, srt = transcrever(audio)
+            print("      transcrevendo...")
+            segs, _ = modelo.transcribe(str(audio), language=IDIOMA, vad_filter=True, beam_size=5)
+            partes_txt, partes_srt = [], []
+            for j, s in enumerate(segs, start=1):
+                t = s.text.strip()
+                partes_txt.append(t)
+                partes_srt.append(f"{j}\n{tempo_srt(s.start)} --> {tempo_srt(s.end)}\n{t}\n")
+            texto = " ".join(partes_txt).strip()
         except Exception as e:  # noqa: BLE001
-            log(f"    [FALHA na transcricao] {e}")
-            falhas.append((n, titulo, "transcricao"))
+            print(f"      >> falha ao transcrever: {e}")
+            falhas.append((n, titulo))
             continue
 
         if not texto:
-            falhas.append((n, titulo, "vazio"))
+            falhas.append((n, titulo))
             continue
 
-        cabecalho = f"# {titulo}\n# {secao}\n# Vimeo ID: {vid}\n\n"
-        out_txt.write_text(cabecalho + texto + "\n", encoding="utf-8")
-        if srt:
-            out_srt.write_text(srt + "\n", encoding="utf-8")
-        log(f"    OK -> {out_txt.name}")
+        out_txt.write_text(f"# {titulo}\n# {secao} | Vimeo {vid}\n\n{texto}\n", encoding="utf-8")
+        out_srt.write_text("\n".join(partes_srt).strip() + "\n", encoding="utf-8")
+        print(f"      OK -> {out_txt.name}")
         ok += 1
 
-        if not MANTER_AUDIO:
-            try:
-                audio.unlink()
-            except OSError:
-                pass
+        try:
+            audio.unlink()
+        except OSError:
+            pass
 
-    # resumo final
-    log("=" * 70)
-    log(f"  Concluido. Transcritos: {ok} | Pulados: {pulados} | Falhas: {len(falhas)}")
+    print("=" * 68)
+    print(f"  Concluido!  Transcritos: {ok} | Pulados: {pulados} | Falhas: {len(falhas)}")
     if falhas:
-        log("  Falhas:")
-        for n, titulo, etapa in falhas:
-            log(f"    #{n:02d} {titulo}  ({etapa})")
-        log("  Dica: confira o acesso (cookies/referer/senha) e rode de novo -")
-        log("        os que ja deram certo serao pulados automaticamente.")
-    log(f"  Resultados em: {OUT_DIR}")
-    log("=" * 70)
+        print("  Nao consegui estes (rode de novo com o navegador do curso logado):")
+        for n, titulo in falhas:
+            print(f"     #{n:02d} {titulo}")
+    print(f"\n  >> Seus textos estao na pasta:  {PASTA_SAIDA}")
+    print("=" * 68)
+    input("\n  Aperte Enter para fechar...")
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n  Interrompido. Rode de novo quando quiser - ele continua de onde parou.")
+    except Exception as e:  # noqa: BLE001
+        print(f"\n  ERRO inesperado: {e}")
+        input("  Aperte Enter para fechar...")
