@@ -34,16 +34,14 @@ IDIOMA         = "pt"
 VIMEO_PASSWORD = ""          # preencha entre as aspas SO se o video pedir senha
 PASTA_SAIDA    = Path.home() / "transcricoes-vimeo"
 
-# Ordem em que ele tenta acessar cada video (para na primeira que funcionar):
-#  - so o referer do curso
-#  - cookies do navegador (caso o video exija login)
-ESTRATEGIAS = [
-    {"nome": "referer",        "cookies": None},
-    {"nome": "cookies chrome", "cookies": "chrome"},
-    {"nome": "cookies edge",   "cookies": "edge"},
-    {"nome": "cookies firefox","cookies": "firefox"},
-    {"nome": "cookies brave",  "cookies": "brave"},
-]
+# Quantas vezes tentar baixar cada video antes de desistir (o erro de
+# "part-Frag" do Windows costuma passar numa nova tentativa).
+TENTATIVAS = 4
+
+# Se algum video exigir login (raro), coloque aqui o navegador onde voce
+# assiste: "chrome", "edge", "firefox" ou "brave". Deixe "" para usar so o
+# referer (que e o que funciona na maioria dos casos).
+COOKIES_NAVEGADOR = ""
 
 # =====================================================================
 # LISTA DOS VIDEOS
@@ -127,7 +125,14 @@ def tempo_srt(seg):
 def baixar_audio(yt_dlp, video_id, destino_base):
     url = f"https://player.vimeo.com/video/{video_id}"
 
-    for est in ESTRATEGIAS:
+    for tentativa in range(1, TENTATIVAS + 1):
+        # limpa restos de download anterior (evita o erro de "part-Frag")
+        for p in destino_base.parent.glob(destino_base.name + ".*"):
+            try:
+                p.unlink()
+            except OSError:
+                pass
+
         opts = {
             "format": "bestaudio/best",
             "outtmpl": str(destino_base) + ".%(ext)s",
@@ -137,9 +142,15 @@ def baixar_audio(yt_dlp, video_id, destino_base):
             "quiet": True,
             "no_warnings": True,
             "ignoreerrors": False,
+            # robustez contra falhas de rede e de arquivo no Windows:
+            "retries": 10,
+            "fragment_retries": 30,
+            "file_access_retries": 30,
+            "concurrent_fragment_downloads": 1,
+            "continuedl": True,
         }
-        if est["cookies"]:
-            opts["cookiesfrombrowser"] = (est["cookies"],)
+        if COOKIES_NAVEGADOR:
+            opts["cookiesfrombrowser"] = (COOKIES_NAVEGADOR,)
         if VIMEO_PASSWORD:
             opts["videopassword"] = VIMEO_PASSWORD
 
@@ -147,13 +158,14 @@ def baixar_audio(yt_dlp, video_id, destino_base):
             with yt_dlp.YoutubeDL(opts) as ydl:
                 ydl.extract_info(url, download=True)
         except Exception as e:  # noqa: BLE001
-            msg = str(e).splitlines()[0][:120]
-            print(f"      x tentativa '{est['nome']}' falhou: {msg}", flush=True)
+            msg = str(e).splitlines()[0][:110]
+            print(f"      x tentativa {tentativa}/{TENTATIVAS} falhou: {msg}", flush=True)
             continue
 
         for p in destino_base.parent.glob(destino_base.name + ".*"):
-            print(f"      ok via '{est['nome']}'", flush=True)
-            return p
+            if not p.name.endswith(".part") and ".part-" not in p.name:
+                print(f"      ok (tentativa {tentativa})", flush=True)
+                return p
     return None
 
 
