@@ -230,8 +230,9 @@ def main():
             falhas.append((n, titulo))
             continue
 
-        out_txt.write_text(f"# {titulo}\n# {secao} | Vimeo {vid}\n\n{texto}\n", encoding="utf-8")
-        out_srt.write_text("\n".join(partes_srt).strip() + "\n", encoding="utf-8")
+        # utf-8-sig (com BOM) para o Windows reconhecer os acentos em qualquer app
+        out_txt.write_text(f"# {titulo}\n# {secao} | Vimeo {vid}\n\n{texto}\n", encoding="utf-8-sig")
+        out_srt.write_text("\n".join(partes_srt).strip() + "\n", encoding="utf-8-sig")
         print(f"      OK -> {out_txt.name}")
         ok += 1
 
