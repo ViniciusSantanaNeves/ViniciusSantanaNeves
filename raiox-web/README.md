@@ -18,8 +18,35 @@ Se você definir a variável `ANTHROPIC_API_KEY`, o relatório passa a incluir u
 ```
 ANTHROPIC_API_KEY=sk-ant-...      # opcional
 MODELO_IA=claude-sonnet-4-5       # opcional, este é o padrão
+GHL_WEBHOOK_URL=https://...       # opcional, envia cada lead para o GoHighLevel
 CHROME_PATH=/usr/bin/chromium     # caminho do Chromium (o Docker já configura)
 ```
+
+## Captação de leads no GHL (GoHighLevel)
+
+O formulário pede **nome e WhatsApp** antes de liberar a análise. Se você configurar a variável `GHL_WEBHOOK_URL`, cada análise envia o lead automaticamente para o seu GHL, já com a tag `avaliacao-nova`.
+
+**Como configurar no GHL:**
+
+1. No GHL, vá em **Automation > Workflows > Create Workflow** (comece do zero).
+2. Adicione o gatilho **Inbound Webhook** e copie a URL que o GHL mostrar.
+3. No Render (ou onde o site estiver publicado), crie a variável de ambiente `GHL_WEBHOOK_URL` com essa URL.
+4. De volta ao workflow, faça uma análise de teste no site para o GHL receber um exemplo e mapear os campos.
+5. Adicione as ações: **Create/Update Contact** (nome = `nome`, telefone = `whatsapp`) e **Add Tag** com `avaliacao-nova`. Se quiser, adicione uma notificação interna para o time comercial.
+6. Publique o workflow.
+
+**Campos enviados em cada lead:**
+
+| Campo | Conteúdo |
+|---|---|
+| `nome`, `whatsapp` | dados digitados pelo proprietário |
+| `origem` | sempre `raiox-express` |
+| `tag` | sempre `avaliacao-nova` |
+| `link_anuncio`, `titulo_anuncio`, `local` | dados do anúncio analisado |
+| `nota`, `avaliacoes`, `superhost`, `fotos` | prova social e volume de fotos |
+| `blocos_ok`, `blocos_melhorar`, `blocos_corrigir` | placar da análise |
+
+Sem a variável configurada, o site funciona normalmente e apenas não envia o lead. O envio nunca trava a análise: se o GHL estiver fora do ar, o PDF sai do mesmo jeito.
 
 ## Rodar localmente
 

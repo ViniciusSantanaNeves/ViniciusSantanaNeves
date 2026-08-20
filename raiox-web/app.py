@@ -67,7 +67,9 @@ footer .slash{color:#D7C075;font-weight:600}
   <p class="sub">Cole o link do seu anúncio no Airbnb e receba, em um minuto,
   uma análise gratuita em PDF com os primeiros passos para vender mais.</p>
   <form method="post" action="/analisar" onsubmit="enviar(this)">
-    <input type="url" name="url" required placeholder="https://www.airbnb.com.br/rooms/..." >
+    <input type="text" name="nome" required placeholder="Seu nome" style="flex:1;min-width:180px;padding:16px 18px;border-radius:999px;border:1.5px solid #333;background:#262626;color:#fff;font:inherit;font-size:15px;outline:none">
+    <input type="tel" name="whatsapp" required placeholder="Seu WhatsApp (com DDD)" style="flex:1;min-width:180px;padding:16px 18px;border-radius:999px;border:1.5px solid #333;background:#262626;color:#fff;font:inherit;font-size:15px;outline:none">
+    <input type="url" name="url" required placeholder="Link do seu anúncio no Airbnb" style="flex-basis:100%">
     <button type="submit">Analisar meu anúncio</button>
   </form>
   <p class="espera" id="espera">Analisando o seu anúncio. Isso leva menos de um minuto...</p>
@@ -113,7 +115,7 @@ def inicio():
 
 
 @app.post("/analisar", response_class=HTMLResponse)
-def analisar(url: str = Form(...)):
+def analisar(url: str = Form(...), nome: str = Form(""), whatsapp: str = Form("")):
     agora = time.time()
     # limpeza simples de trabalhos antigos (mais de 2 horas)
     for pasta in TRABALHOS.iterdir():
@@ -153,8 +155,40 @@ def analisar(url: str = Form(...)):
     except Exception:
         raise HTTPException(500, "Falha ao gerar o PDF. Tente novamente.")
 
+    _enviar_lead_ghl(nome, whatsapp, dados, resultado)
+
     titulo = dados.get("titulo") or "Seu anúncio"
     return PAGINA_OK.replace("__ID__", trabalho).replace("__TITULO__", titulo)
+
+
+def _enviar_lead_ghl(nome: str, whatsapp: str, dados: dict, resultado: dict):
+    """Envia o lead para o GoHighLevel por webhook, se configurado."""
+    import os
+    import httpx
+    webhook = os.environ.get("GHL_WEBHOOK_URL", "").strip()
+    if not webhook:
+        return
+    placar = resultado.get("placar", {})
+    payload = {
+        "nome": nome,
+        "whatsapp": whatsapp,
+        "origem": "raiox-express",
+        "tag": "avaliacao-nova",
+        "link_anuncio": dados.get("url", ""),
+        "titulo_anuncio": dados.get("titulo", ""),
+        "local": dados.get("local", ""),
+        "nota": dados.get("nota", ""),
+        "avaliacoes": dados.get("avaliacoes", ""),
+        "superhost": "sim" if dados.get("superhost") else "nao",
+        "fotos": len(dados.get("fotos", [])),
+        "blocos_ok": placar.get("OK", 0),
+        "blocos_melhorar": placar.get("AJUSTE", 0),
+        "blocos_corrigir": placar.get("CRITICO", 0),
+    }
+    try:
+        httpx.post(webhook, json=payload, timeout=6)
+    except Exception:
+        pass
 
 
 @app.get("/baixar/{trabalho}")
