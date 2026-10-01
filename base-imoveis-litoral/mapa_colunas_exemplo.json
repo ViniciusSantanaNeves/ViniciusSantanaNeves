@@ -1,0 +1,49 @@
+{
+  "_leia_me": "Copie para mapa_colunas.json e troque os nomes à direita pelos nomes EXATOS das colunas do arquivo enviado pela prefeitura. Campo que a prefeitura não enviar: deixe \"\". Nada é preenchido por suposição.",
+  "cidade": "Bertioga",
+  "protocolo": "LAI Bertioga nº 0000/2026",
+  "orgao": "Prefeitura de Bertioga — Fazenda (resposta LAI)",
+  "status_inicial": "Validado",
+  "aba": "",
+  "linha_cabecalho": 1,
+  "csv_separador": ";",
+  "csv_encoding": "utf-8-sig",
+  "separador_decimal": ",",
+  "formatos_data": ["%d/%m/%Y", "%Y-%m-%d", "%d/%m/%Y %H:%M:%S"],
+  "colunas": {
+    "natureza": "NATUREZA DA TRANSAÇÃO",
+    "valor_venda": "VALOR DECLARADO",
+    "base_itbi": "BASE DE CÁLCULO",
+    "venal_iptu": "VALOR VENAL IPTU",
+    "bairro": "BAIRRO",
+    "endereco": "LOGRADOURO",
+    "numero": "NÚMERO",
+    "complemento": "COMPLEMENTO",
+    "inscricao": "INSCRIÇÃO IMOBILIÁRIA",
+    "matricula": "MATRÍCULA",
+    "cartorio": "CARTÓRIO",
+    "tipo": "TIPO DO IMÓVEL",
+    "area_construida": "ÁREA CONSTRUÍDA",
+    "area_terreno": "ÁREA DO TERRENO",
+    "padrao_original": "PADRÃO CONSTRUTIVO",
+    "data_escritura": "DATA DA TRANSAÇÃO",
+    "data_registro": ""
+  },
+  "naturezas_aceitas": ["Compra e venda", "Compra e Venda", "Compra/Venda"],
+  "apelidos_bairro": {
+    "São Rafael": "Jardim Raphael",
+    "Brasfanta": "Buriqui Costa Nativa (Brasfanta)",
+    "Juquehy": "Juqueí",
+    "Riviera de São Lourenço": "Riviera"
+  },
+  "mapa_padrao": {
+    "ALTO": "Alto",
+    "NORMAL": "Normal",
+    "BAIXO": "Baixo"
+  },
+  "mapa_tipo": {
+    "APARTAMENTO": "Apartamento",
+    "CASA": "Casa",
+    "TERRENO": "Terreno"
+  }
+}

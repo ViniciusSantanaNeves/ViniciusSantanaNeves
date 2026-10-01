@@ -1,0 +1,4 @@
+fotos/.miniaturas/
+*_relatorio_importacao.csv
+__pycache__/
+~$*.xlsx
