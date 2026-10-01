@@ -36,7 +36,12 @@ Os cartórios também atendem pedidos pelo próprio site ou no balcão.
    - o número do ato (ex.: **R-7**).
 3. Se a matrícula informar, anote a **área** (privativa/construída e do terreno) que aparece na descrição do imóvel ou numa averbação de construção (**Av-n**).
 4. Se houver averbação do **valor venal** ou da guia de ITBI, anote o valor em "Base de cálculo ITBI" ou "Valor venal IPTU", conforme o caso.
-5. **Fica fora da base:** registros de doação, partilha/inventário, permuta, integralização de capital, arrematação, adjudicação e consolidação da propriedade fiduciária. Também fica fora a alienação fiduciária, que é uma garantia e não uma venda.
+5. **Se a compra foi financiada**, logo depois do R-n da venda costuma vir o registro da **alienação fiduciária** (ou da hipoteca). Anote:
+   - **Forma de pagamento** = Financiado;
+   - **Valor financiado** = valor da dívida/financiamento;
+   - **Valor p/ leilão** = "valor do imóvel para fins de leilão" do contrato (Lei 9.514/97, art. 24, VI).
+   Sem registro de garantia, use "À vista" **somente** se a escritura disser que o pagamento foi à vista. Caso contrário, use "Não informado".
+6. **Fica fora da base:** registros de doação, partilha/inventário, permuta, integralização de capital, arrematação, adjudicação e consolidação da propriedade fiduciária. A alienação fiduciária também não entra como venda, porque é uma garantia: use os dados dela só nas colunas de financiamento da venda correspondente.
 
 ## 4. Lançar na planilha (aba Vendas)
 

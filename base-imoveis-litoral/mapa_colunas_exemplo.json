@@ -9,12 +9,19 @@
   "csv_separador": ";",
   "csv_encoding": "utf-8-sig",
   "separador_decimal": ",",
-  "formatos_data": ["%d/%m/%Y", "%Y-%m-%d", "%d/%m/%Y %H:%M:%S"],
+  "formatos_data": [
+    "%d/%m/%Y",
+    "%Y-%m-%d",
+    "%d/%m/%Y %H:%M:%S"
+  ],
   "colunas": {
     "natureza": "NATUREZA DA TRANSAÇÃO",
     "valor_venda": "VALOR DECLARADO",
     "base_itbi": "BASE DE CÁLCULO",
     "venal_iptu": "VALOR VENAL IPTU",
+    "forma_pagamento": "TIPO DE FINANCIAMENTO",
+    "valor_financiado": "VALOR FINANCIADO",
+    "valor_leilao": "",
     "bairro": "BAIRRO",
     "endereco": "LOGRADOURO",
     "numero": "NÚMERO",
@@ -29,7 +36,11 @@
     "data_escritura": "DATA DA TRANSAÇÃO",
     "data_registro": ""
   },
-  "naturezas_aceitas": ["Compra e venda", "Compra e Venda", "Compra/Venda"],
+  "naturezas_aceitas": [
+    "Compra e venda",
+    "Compra e Venda",
+    "Compra/Venda"
+  ],
   "apelidos_bairro": {
     "São Rafael": "Jardim Raphael",
     "Brasfanta": "Buriqui Costa Nativa (Brasfanta)",
@@ -45,5 +56,12 @@
     "APARTAMENTO": "Apartamento",
     "CASA": "Casa",
     "TERRENO": "Terreno"
+  },
+  "mapa_forma_pagamento": {
+    "À VISTA": "À vista",
+    "A VISTA": "À vista",
+    "SFH": "Financiado",
+    "SFI": "Financiado",
+    "CONSÓRCIO": "Financiado"
   }
 }

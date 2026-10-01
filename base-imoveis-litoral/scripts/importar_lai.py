@@ -21,13 +21,14 @@ from datetime import date, datetime
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from openpyxl import load_workbook  # noqa: E402
 
-from esquema import (BAIRROS, CIDADES, FMT_DATA, FMT_M2, FMT_REAIS, PADROES, PRIMEIRA_LINHA,  # noqa: E402
-                     TIPOS, ULTIMA_LINHA, escrever_formulas_linha, idx, normalizar, salvar)
+from esquema import (BAIRROS, CIDADES, FMT_DATA, FMT_M2, FMT_REAIS, FORMAS_PAGAMENTO, PADROES,  # noqa: E402
+                     PRIMEIRA_LINHA, TIPOS, ULTIMA_LINHA, escrever_formulas_linha, idx, normalizar, salvar)
 
 PLANILHA_PADRAO = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                                "base_imoveis_vendidos.xlsx")
 SIGLA = {"São Sebastião": "SS", "Bertioga": "BE"}
-CAMPOS_NUMERICOS = ("valor_venda", "base_itbi", "venal_iptu", "area_construida", "area_terreno")
+CAMPOS_NUMERICOS = ("valor_venda", "base_itbi", "venal_iptu", "valor_financiado", "valor_leilao",
+                    "area_construida", "area_terreno")
 CAMPOS_DATA = ("data_escritura", "data_registro")
 
 
@@ -226,6 +227,12 @@ def main():
         tipo = mapear(tipo_raw, cfg.get("mapa_tipo", {}), TIPOS)
         if tipo_raw not in (None, "") and not tipo:
             motivos.append(f"tipo sem correspondência no mapa_tipo: {tipo_raw!r}")
+        fp_raw = g("forma_pagamento")
+        forma = mapear(fp_raw, cfg.get("mapa_forma_pagamento", {}), FORMAS_PAGAMENTO[:-1])
+        if fp_raw not in (None, "") and not forma:
+            motivos.append(f"forma de pagamento sem correspondência no mapa_forma_pagamento: {fp_raw!r}")
+        if not forma and dados["valor_financiado"]:
+            forma = "Financiado"  # valor financiado > 0 informado pela prefeitura
         pad_raw = g("padrao_original")
         padrao = mapear(pad_raw, cfg.get("mapa_padrao", {}), PADROES[:-1])
 
@@ -244,7 +251,9 @@ def main():
             "padrao": padrao or "Não informado",
             "origem_padrao": "Cadastro municipal (ITBI/IPTU)" if padrao else "Não informado",
             "padrao_original": pad_raw, "valor_venda": valor, "base_itbi": dados["base_itbi"],
-            "venal_iptu": dados["venal_iptu"], "data_escritura": dados["data_escritura"],
+            "venal_iptu": dados["venal_iptu"], "forma_pagamento": forma or "Não informado",
+            "valor_financiado": dados["valor_financiado"], "valor_leilao": dados["valor_leilao"],
+            "data_escritura": dados["data_escritura"],
             "data_registro": dados["data_registro"], "natureza": "Compra e venda",
             "fonte": "LAI – ITBI Prefeitura", "documento": documento, "orgao": cfg.get("orgao"),
             "origem_foto": "Sem foto", "status": status_inicial,
@@ -260,7 +269,7 @@ def main():
             r = prox_linha
             for chave, v in linha.items():
                 c = ws.cell(row=r, column=idx(chave), value=v)
-                if chave in ("valor_venda", "base_itbi", "venal_iptu"):
+                if chave in ("valor_venda", "base_itbi", "venal_iptu", "valor_financiado", "valor_leilao"):
                     c.number_format = FMT_REAIS
                 elif chave in ("area_construida", "area_terreno"):
                     c.number_format = FMT_M2

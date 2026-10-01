@@ -28,7 +28,8 @@ Com base na Lei Federal nº 12.527/2011 (Lei de Acesso à Informação), em espe
 9. Área construída / privativa e área do terreno, em m²;
 10. Padrão, tipo ou classe construtiva registrada no cadastro imobiliário;
 11. Data da transação e/ou data de lançamento/pagamento do ITBI;
-12. Proporção transmitida (%), quando não for 100%.
+12. Proporção transmitida (%), quando não for 100%;
+13. Forma de pagamento / tipo de financiamento (à vista, SFH, SFI, consórcio etc.) e valor financiado, conforme declarado na guia de ITBI.
 
 **Não solicito** nome, CPF/CNPJ ou qualquer dado pessoal de transmitentes e adquirentes. Assim, a resposta não envolve dado pessoal protegido pelo art. 31 da LAI nem informação protegida por sigilo fiscal (art. 198 do CTN). Os campos pedidos descrevem o imóvel e a operação. Se algum campo for considerado sigiloso, peço que os demais sejam entregues, nos termos do art. 7º, § 2º, da LAI (acesso parcial).
 

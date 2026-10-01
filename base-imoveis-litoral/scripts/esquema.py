@@ -112,6 +112,7 @@ ORIGEM_PADRAO = ["Cadastro municipal (ITBI/IPTU)", "Certidão/memorial/habite-se
                  "Vistoria própria (critério NBR 12721)", "Não informado"]
 NATUREZAS = ["Compra e venda"]
 FONTES = ["LAI – ITBI Prefeitura", "Certidão de matrícula (CRI)"]
+FORMAS_PAGAMENTO = ["Financiado", "À vista", "Não informado"]
 ORIGEM_FOTO = ["Foto própria no local", "Google Street View (link)", "Foto da certidão/laudo", "Sem foto"]
 STATUS = ["Validado", "Pendente de conferência", "Rejeitado"]
 
@@ -134,10 +135,24 @@ COLUNAS = [
                                               "ou 'valor da transação' informado no ITBI. NUNCA o valor anunciado."),
     ("base_itbi", "Base de cálculo ITBI (R$)", 16, "Base de cálculo usada pela prefeitura, se informada."),
     ("venal_iptu", "Valor venal IPTU (R$)", 16, "Valor venal do IPTU no ano da transação, se informado."),
+    ("forma_pagamento", "Forma de pagamento", 16, "Financiado / À vista / Não informado — conforme ITBI "
+                                                   "ou matrícula (registro de alienação fiduciária ou hipoteca)."),
+    ("valor_financiado", "Valor financiado (R$)", 16, "Valor do financiamento informado no ITBI ou o valor da "
+                                                     "dívida no registro de alienação fiduciária/hipoteca."),
+    ("valor_leilao", "Valor p/ leilão – alienação fiduciária (R$)", 18,
+     "Valor do imóvel convencionado no contrato de alienação fiduciária para fins de leilão "
+     "(Lei 9.514/97, art. 24, VI), conforme consta no registro da matrícula."),
     ("rs_m2", "R$/m² (calculado)", 13, "Fórmula: valor de venda ÷ área construída/privativa "
                                       "(ou ÷ área do terreno, quando o tipo for Terreno). Não editar."),
     ("alerta", "Alerta", 22, "Fórmula. Sinaliza valor de venda menor ou igual ao venal do IPTU "
                             "(indício de subdeclaração). Não altera o valor."),
+    ("razao_base", "Declarado ÷ Base ITBI", 12, "Fórmula. <1 = prefeitura usou base maior que o valor declarado."),
+    ("razao_venal", "Declarado ÷ Venal IPTU", 12, "Fórmula."),
+    ("razao_leilao", "Declarado ÷ Valor leilão", 12, "Fórmula. <1 = preço declarado abaixo do valor do imóvel "
+                                                    "fixado no contrato de alienação fiduciária."),
+    ("razao_financiado", "Financiado ÷ Declarado", 12, "Fórmula. ≥1 = financiamento igual ou maior que o preço "
+                                                      "declarado (sinal a investigar)."),
+    ("ano", "Ano", 7, "Fórmula: ano da escritura/transação."),
     ("data_escritura", "Data da escritura / transação", 14, "Data (dd/mm/aaaa)."),
     ("data_registro", "Data do registro", 14, "Data em que o ato foi registrado no CRI."),
     ("natureza", "Natureza", 16, "Somente compra e venda onerosa entra na base."),
@@ -193,8 +208,11 @@ quebra = Alignment(wrap_text=True, vertical="top")
 FMT_REAIS = 'R$ #,##0.00;-R$ #,##0.00;"-"'
 FMT_M2 = '#,##0.00'
 FMT_DATA = 'DD/MM/YYYY'
+FMT_RAZAO = '0.000'
+FMT_PCT = '0.0%'
 
-COLUNAS_FORMULA = {"rs_m2", "alerta", "street_view"}
+COLUNAS_FORMULA = {"rs_m2", "alerta", "street_view", "razao_base", "razao_venal", "razao_leilao",
+                   "razao_financiado", "ano"}
 
 
 def _cabecalho(ws, titulos, linha=1, larguras=None):
@@ -235,8 +253,30 @@ def formula_street_view(r: int) -> str:
             f'&viewpoint="&SUBSTITUTE({c}{r}," ",""),"Abrir Street View"))')
 
 
+def formula_razao(num: str, den: str):
+    def f(r: int) -> str:
+        a, b = col(num), col(den)
+        return f'=IF(AND(ISNUMBER({a}{r}),ISNUMBER({b}{r})),IF({b}{r}>0,{a}{r}/{b}{r},""),"")'
+    return f
+
+
+def formula_ano(r: int) -> str:
+    d = col("data_escritura")
+    return f'=IF(ISNUMBER({d}{r}),YEAR({d}{r}),"")'
+
+
+FORMULAS_LINHA = (
+    ("rs_m2", formula_rs_m2), ("alerta", formula_alerta), ("street_view", formula_street_view),
+    ("razao_base", formula_razao("valor_venda", "base_itbi")),
+    ("razao_venal", formula_razao("valor_venda", "venal_iptu")),
+    ("razao_leilao", formula_razao("valor_venda", "valor_leilao")),
+    ("razao_financiado", formula_razao("valor_financiado", "valor_venda")),
+    ("ano", formula_ano),
+)
+
+
 def escrever_formulas_linha(ws, r: int):
-    for chave, f in (("rs_m2", formula_rs_m2), ("alerta", formula_alerta), ("street_view", formula_street_view)):
+    for chave, f in FORMULAS_LINHA:
         c = ws.cell(row=r, column=idx(chave), value=f(r))
         c.fill = preench_formula
         c.font = fonte_link if chave == "street_view" else fonte_normal
@@ -253,6 +293,7 @@ def criar_planilha() -> Workbook:
     _aba_bairros(wb.create_sheet("Bairros"))
     _aba_listas(wb.create_sheet("Listas"))
     _aba_resumo(wb.create_sheet("Resumo"))
+    _aba_analise(wb.create_sheet("Análise ITBI"))
     _aba_padrao(wb.create_sheet("Padrão"))
     _aba_fontes(wb.create_sheet("Fontes"))
     _aba_regras(wb.create_sheet("Regras"))
@@ -273,7 +314,9 @@ def _aba_vendas(ws):
     ws.auto_filter.ref = f"A1:{get_column_letter(len(COLUNAS))}{ULTIMA_LINHA}"
 
     formatos = {"valor_venda": FMT_REAIS, "base_itbi": FMT_REAIS, "venal_iptu": FMT_REAIS,
-                "rs_m2": FMT_REAIS, "area_construida": FMT_M2, "area_terreno": FMT_M2,
+                "rs_m2": FMT_REAIS, "valor_financiado": FMT_REAIS, "valor_leilao": FMT_REAIS,
+                "razao_base": FMT_RAZAO, "razao_venal": FMT_RAZAO, "razao_leilao": FMT_RAZAO,
+                "razao_financiado": FMT_RAZAO, "ano": "0", "area_construida": FMT_M2, "area_terreno": FMT_M2,
                 "data_escritura": FMT_DATA, "data_registro": FMT_DATA, "data_foto": FMT_DATA}
     for r in range(PRIMEIRA_LINHA, ULTIMA_LINHA + 1):
         for chave, fmt in formatos.items():
@@ -295,6 +338,7 @@ def _aba_vendas(ws):
     lista("natureza", "LISTA_NATUREZAS", "Somente compra e venda onerosa entra na base.")
     lista("fonte", "LISTA_FONTES", "Somente LAI ou certidão de matrícula.")
     lista("origem_foto", "LISTA_ORIGEM_FOTO", "Escolha a origem da foto.")
+    lista("forma_pagamento", "LISTA_FORMA_PAGAMENTO", "Financiado, À vista ou Não informado.")
     lista("status", "LISTA_STATUS", "Escolha um status.")
 
     c0 = col("cidade")
@@ -305,7 +349,8 @@ def _aba_vendas(ws):
     dv_b.add(faixa("bairro"))
     ws.add_data_validation(dv_b)
 
-    for chave in ("valor_venda", "base_itbi", "venal_iptu", "area_construida", "area_terreno"):
+    for chave in ("valor_venda", "base_itbi", "venal_iptu", "valor_financiado", "valor_leilao",
+                  "area_construida", "area_terreno"):
         dv = DataValidation(type="decimal", operator="greaterThan", formula1="0", allow_blank=True,
                             showErrorMessage=True, errorTitle="Número inválido",
                             error="Informe apenas um número maior que zero (sem R$ ou m²).")
@@ -360,7 +405,7 @@ def _aba_listas(ws):
     listas = [("Cidades", "LISTA_CIDADES", CIDADES), ("Tipos", "LISTA_TIPOS", TIPOS),
               ("Padrões", "LISTA_PADROES", PADROES), ("Origem do padrão", "LISTA_ORIGEM_PADRAO", ORIGEM_PADRAO),
               ("Natureza", "LISTA_NATUREZAS", NATUREZAS), ("Fontes", "LISTA_FONTES", FONTES),
-              ("Origem da foto", "LISTA_ORIGEM_FOTO", ORIGEM_FOTO), ("Status", "LISTA_STATUS", STATUS)]
+              ("Origem da foto", "LISTA_ORIGEM_FOTO", ORIGEM_FOTO), ("Forma de pagamento", "LISTA_FORMA_PAGAMENTO", FORMAS_PAGAMENTO), ("Status", "LISTA_STATUS", STATUS)]
     for i, (titulo, nome, valores) in enumerate(listas, start=1):
         letra = get_column_letter(i)
         c = ws.cell(row=1, column=i, value=titulo)
@@ -458,6 +503,130 @@ def _aba_resumo(ws):
     ws.freeze_panes = "C5"
 
 
+
+# ---------------------------------------------------------------------------
+# Análise de subdeclaração no ITBI
+# ---------------------------------------------------------------------------
+ANOS_ANALISE = list(range(2021, 2027))
+AMOSTRA_MIN_PADRAO = 5
+
+INDICADORES = [
+    # (título, comentário, formato)
+    ("Nº vendas validadas", "Compras e vendas com Status = Validado no recorte.", "0"),
+    ("Nº c/ base ITBI", "Vendas com valor declarado e base de cálculo do ITBI.", "0"),
+    ("Mediana Declarado ÷ Base ITBI", "Mediana da razão. 1,000 = prefeitura aceitou o valor declarado. "
+                                     "Abaixo de 1 = base maior que o declarado.", FMT_RAZAO),
+    ("% c/ base > declarado", "Parcela das vendas em que a prefeitura adotou base de cálculo MAIOR que o "
+                             "valor declarado (arbitramento ou valor de referência).", FMT_PCT),
+    ("COD Declarado ÷ Base", "Coeficiente de dispersão (IAAO): desvio absoluto médio em torno da mediana, "
+                            "em % da mediana. Quanto maior, menos uniforme a relação entre declarado e base.", "0.0"),
+    ("Nº c/ venal IPTU", "Vendas com valor declarado e valor venal do IPTU.", "0"),
+    ("Mediana Declarado ÷ Venal", "Quantas vezes o preço declarado supera o valor venal do IPTU.", FMT_RAZAO),
+    ("% declarado ≤ venal", "Parcela das vendas com preço declarado menor ou igual ao venal do IPTU "
+                           "(sinal forte de subdeclaração).", FMT_PCT),
+    ("Nº financiadas (c/ m²)", "Vendas financiadas com R$/m² calculado.", "0"),
+    ("Nº à vista (c/ m²)", "Vendas à vista com R$/m² calculado.", "0"),
+    ("R$/m² mediano financiadas", "Mediana do R$/m² declarado nas vendas financiadas.", FMT_REAIS),
+    ("R$/m² mediano à vista", "Mediana do R$/m² declarado nas vendas à vista.", FMT_REAIS),
+    ("Dif. à vista vs financiada", "R$/m² mediano à vista ÷ financiadas − 1. Negativo = vendas à vista "
+                                  "declaram menos por m². Compare dentro do mesmo bairro/padrão: diferenças de "
+                                  "imóvel e de perfil do comprador também entram nesse número.", FMT_PCT),
+    ("Nº c/ valor leilão", "Vendas financiadas por alienação fiduciária com o valor para leilão (art. 24, VI "
+                           "da Lei 9.514/97) lançado.", "0"),
+    ("Mediana Declarado ÷ Leilão", "Abaixo de 1 = preço declarado menor que o valor do imóvel fixado no "
+                                   "contrato de financiamento.", FMT_RAZAO),
+    ("% declarado < leilão", "Parcela das vendas com preço declarado abaixo do valor para leilão.", FMT_PCT),
+    ("Nº c/ valor financiado", "Vendas com valor financiado lançado.", "0"),
+    ("% financiado ≥ declarado", "Parcela em que o valor financiado é igual ou maior que o preço declarado "
+                                 "(sinal a investigar).", FMT_PCT),
+]
+
+
+def _aba_analise(ws):
+    wb = ws.parent
+    ws["A1"] = "Análise de subdeclaração do valor de venda no ITBI"
+    ws["A1"].font = fonte_titulo
+    ws["A2"] = ("Usa só vendas com Status = Validado. Nenhum número é estimado: cada indicador sai dos documentos "
+                "lançados na aba Vendas. Recortes com menos vendas que a amostra mínima mostram 'n<mín'.")
+    ws["A2"].font = Font(name=FONTE, size=9, italic=True)
+    ws["A2"].alignment = quebra
+    ws.merge_cells("A2:L2")
+    ws.row_dimensions[2].height = 28
+    _texto(ws, 4, "Amostra mínima (n)", True)
+    c = ws.cell(row=4, column=2, value=AMOSTRA_MIN_PADRAO)
+    c.fill, c.font = preench_entrada, Font(name=FONTE, size=10, color="0000FF", bold=True)
+    c.comment = Comment("Escolha metodológica ajustável: número mínimo de vendas para mostrar mediana, COD ou "
+                        "comparação. Com menos que isso o indicador mostra 'n<mín'.", "Base de vendas")
+    _definir_nome(wb, "AMOSTRA_MIN", "'Análise ITBI'!$B$4")
+    _texto(ws, 5, "Método e leitura: ver docs/analise_subdeclaracao_ITBI.md. Passe o mouse nos cabeçalhos "
+                  "para a definição de cada indicador.", False)
+
+    R = lambda chave: f"Vendas!${col(chave)}${PRIMEIRA_LINHA}:${col(chave)}${ULTIMA_LINHA}"
+    rb, rv, rl, rf, m2, fp = (R("razao_base"), R("razao_venal"), R("razao_leilao"), R("razao_financiado"),
+                              R("rs_m2"), R("forma_pagamento"))
+    MIN = "AMOSTRA_MIN"
+    L = get_column_letter
+
+    blocos = [("Por cidade", None, [(cid, "Todas") for cid in CIDADES]),
+              ("Por cidade e ano da escritura", "ano", [(cid, a) for cid in CIDADES for a in ANOS_ANALISE]),
+              ("Por cidade e padrão", "padrao", [(cid, p) for cid in CIDADES for p in PADROES]),
+              ("Por cidade e bairro", "bairro", [(cid, b[0]) for cid in CIDADES for b in BAIRROS[cid]])]
+    linha = 7
+    for titulo, chave, grupos in blocos:
+        ws.cell(row=linha, column=1, value=titulo).font = Font(name=FONTE, size=12, bold=True, color=AZUL_ESCURO)
+        linha += 1
+        segundo = {None: "Recorte", "ano": "Ano", "padrao": "Padrão", "bairro": "Bairro"}[chave]
+        _cabecalho(ws, ["Cidade", segundo] + [i[0] for i in INDICADORES], linha)
+        for j, (_, nota, _) in enumerate(INDICADORES, start=3):
+            ws.cell(row=linha, column=j).comment = Comment(nota, "Base de vendas")
+        ws.row_dimensions[linha].height = 48
+        linha += 1
+        for cidade, valor in grupos:
+            r = linha
+            ws.cell(row=r, column=1, value=cidade).font = fonte_normal
+            ws.cell(row=r, column=2, value=valor).font = fonte_normal
+            cond = f'({R("status")}="Validado")*({R("cidade")}=$A{r})'
+            if chave:
+                cond += f'*({R(chave)}=$B{r})'
+            C = lambda k: f"{L(k)}{r}"     # célula do indicador k (coluna)
+            f = {}
+            f[3] = f"=SUMPRODUCT({cond})"
+            f[4] = f"=SUMPRODUCT({cond}*ISNUMBER({rb}))"
+            f[5] = ArrayFormula(C(5), f'=IF({C(4)}<{MIN},"n<mín",MEDIAN(IF({cond}*ISNUMBER({rb}),{rb})))')
+            f[6] = f'=IF({C(4)}=0,"-",SUMPRODUCT({cond}*ISNUMBER({rb})*({rb}<1))/{C(4)})'
+            f[7] = ArrayFormula(C(7), f'=IF({C(4)}<{MIN},"n<mín",'
+                                      f'100*AVERAGE(IF({cond}*ISNUMBER({rb}),ABS({rb}-{C(5)})))/{C(5)})')
+            f[8] = f"=SUMPRODUCT({cond}*ISNUMBER({rv}))"
+            f[9] = ArrayFormula(C(9), f'=IF({C(8)}<{MIN},"n<mín",MEDIAN(IF({cond}*ISNUMBER({rv}),{rv})))')
+            f[10] = f'=IF({C(8)}=0,"-",SUMPRODUCT({cond}*ISNUMBER({rv})*({rv}<=1))/{C(8)})'
+            f[11] = f'=SUMPRODUCT({cond}*({fp}="Financiado")*ISNUMBER({m2}))'
+            f[12] = f'=SUMPRODUCT({cond}*({fp}="À vista")*ISNUMBER({m2}))'
+            f[13] = ArrayFormula(C(13), f'=IF({C(11)}<{MIN},"n<mín",'
+                                        f'MEDIAN(IF({cond}*({fp}="Financiado")*ISNUMBER({m2}),{m2})))')
+            f[14] = ArrayFormula(C(14), f'=IF({C(12)}<{MIN},"n<mín",'
+                                        f'MEDIAN(IF({cond}*({fp}="À vista")*ISNUMBER({m2}),{m2})))')
+            f[15] = f'=IF(OR({C(11)}<{MIN},{C(12)}<{MIN}),"n<mín",{C(14)}/{C(13)}-1)'
+            f[16] = f"=SUMPRODUCT({cond}*ISNUMBER({rl}))"
+            f[17] = ArrayFormula(C(17), f'=IF({C(16)}<{MIN},"n<mín",MEDIAN(IF({cond}*ISNUMBER({rl}),{rl})))')
+            f[18] = f'=IF({C(16)}=0,"-",SUMPRODUCT({cond}*ISNUMBER({rl})*({rl}<1))/{C(16)})'
+            f[19] = f"=SUMPRODUCT({cond}*ISNUMBER({rf}))"
+            f[20] = f'=IF({C(19)}=0,"-",SUMPRODUCT({cond}*ISNUMBER({rf})*({rf}>=1))/{C(19)})'
+            for k, v in f.items():
+                if isinstance(v, ArrayFormula):
+                    ws[C(k)] = v
+                    cel = ws[C(k)]
+                else:
+                    cel = ws.cell(row=r, column=k, value=v)
+                cel.font = fonte_normal
+                cel.number_format = INDICADORES[k - 3][2]
+            linha += 1
+        linha += 2
+    ws.column_dimensions["A"].width = 16
+    ws.column_dimensions["B"].width = 26
+    for k in range(3, 3 + len(INDICADORES)):
+        ws.column_dimensions[L(k)].width = 14
+    ws.freeze_panes = "C9"
+
 def _aba_padrao(ws):
     ws["A1"] = "Critério de padrão construtivo"
     ws["A1"].font = fonte_titulo
@@ -523,7 +692,13 @@ REGRAS = [
     ("8. Padrão", "Conforme aba Padrão. Sem documento ou vistoria: 'Não informado'."),
     ("9. Foto", "Somente foto real do imóvel: tirada no local, link do Street View nas coordenadas do "
                 "imóvel ou imagem constante de documento. Nunca imagem de anúncio de outro imóvel."),
-    ("10. Status", "Validado = documento conferido e arquivado (aba Fontes). Pendente = falta conferir. "
+    ("10. Forma de pagamento", "Financiado só com registro de alienação fiduciária/hipoteca na matrícula ou "
+                               "financiamento informado no ITBI. À vista só se o documento disser. Fora disso, "
+                               "'Não informado'."),
+    ("11. Análise ITBI", "A aba Análise ITBI e o script analisar_subdeclaracao.py só usam vendas Validado e só "
+                         "mostram mediana/comparação com amostra ≥ mínima (célula B4). Método em "
+                         "docs/analise_subdeclaracao_ITBI.md."),
+    ("12. Status", "Validado = documento conferido e arquivado (aba Fontes). Pendente = falta conferir. "
                    "Rejeitado = não atende às regras. O Resumo usa só Validado."),
 ]
 
@@ -612,6 +787,9 @@ def _aba_instrucoes(ws):
         "tipo": "Casa em condomínio", "area_construida": "000,00", "area_terreno": "000,00",
         "padrao": "Alto", "origem_padrao": "Certidão/memorial/habite-se", "padrao_original": "texto literal",
         "valor_venda": "0.000.000,00", "base_itbi": "0.000.000,00", "venal_iptu": "000.000,00",
+        "forma_pagamento": "Financiado", "valor_financiado": "000.000,00", "valor_leilao": "0.000.000,00",
+        "razao_base": "(automático)", "razao_venal": "(automático)", "razao_leilao": "(automático)",
+        "razao_financiado": "(automático)", "ano": "(automático)",
         "rs_m2": "(automático)", "alerta": "(automático)", "data_escritura": "dd/mm/aaaa",
         "data_registro": "dd/mm/aaaa", "natureza": "Compra e venda", "fonte": "Certidão de matrícula (CRI)",
         "documento": "Matrícula 00.000 — R-0", "orgao": "RI São Sebastião",

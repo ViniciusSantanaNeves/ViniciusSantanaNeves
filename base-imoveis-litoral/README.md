@@ -13,10 +13,12 @@ São Sebastião e Bertioga não publicam dados de vendas de imóveis. No estado 
 
 | Arquivo | O que é |
 |---|---|
-| `base_imoveis_vendidos.xlsx` | A base. Abas: Instruções, Vendas, Bairros, Listas, Resumo, Padrão, Fontes, Regras, Referências e Galeria |
+| `base_imoveis_vendidos.xlsx` | A base. Abas: Instruções, Vendas, Bairros, Listas, Resumo, Análise ITBI, Padrão, Fontes, Regras, Referências e Galeria |
 | `docs/pedido_LAI_sao_sebastiao.md` / `docs/pedido_LAI_bertioga.md` | Pedidos LAI prontos para protocolar |
 | `docs/recurso_LAI.md` | Modelo de recurso para negativa ou resposta parcial |
 | `docs/guia_certidoes_cartorio.md` | Qual cartório procurar, como pedir a certidão, como ler e lançar os dados, fotos |
+| `docs/analise_subdeclaracao_ITBI.md` | Análise de mercado sobre subdeclaração no ITBI: o que já foi publicado, contexto legal e método |
+| `scripts/analisar_subdeclaracao.py` | Gera `relatorio_subdeclaracao.md` com os indicadores calculados das vendas validadas |
 | `scripts/importar_lai.py` | Importa o arquivo de ITBI da prefeitura aplicando as regras |
 | `scripts/vincular_fotos.py` | Liga as fotos de `fotos/` às vendas e monta a Galeria |
 | `scripts/gerar_planilha.py` | Recria a planilha vazia |
@@ -34,7 +36,10 @@ python scripts/importar_lai.py resposta_bertioga.xlsx mapa_colunas_bertioga.json
 
 # 2. Certidões: lançar à mão na aba Vendas (ver guia)
 
-# 3. Fotos: salvar como fotos/<ID>.jpg (ou <ID>_2.jpg ...) e rodar
+# 3. Análise de subdeclaração no ITBI (depois que houver vendas validadas)
+python scripts/analisar_subdeclaracao.py
+
+# 4. Fotos: salvar como fotos/<ID>.jpg (ou <ID>_2.jpg ...) e rodar
 python scripts/vincular_fotos.py
 ```
 
