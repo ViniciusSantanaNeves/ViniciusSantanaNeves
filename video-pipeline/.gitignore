@@ -1,0 +1,7 @@
+node_modules/
+trabalhos/
+*.mp4
+*.mov
+*.wav
+.hyperframes/
+__pycache__/

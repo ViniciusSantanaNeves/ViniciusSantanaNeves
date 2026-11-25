@@ -1,0 +1,93 @@
+{
+  "_sobre": "Pauta de edição de um Reel de imóvel. Tempos em segundos do vídeo bruto (veja a transcrição).",
+  "marca": {
+    "cor": "#FFD400",
+    "fonte": "Montserrat"
+  },
+  "legenda": {
+    "estilo": "dinamico",
+    "palavrasPorBloco": 3,
+    "baseY": 1220
+  },
+  "correcoes": {
+    "Olhe": "Olha",
+    "há": "a",
+    "Varanda": "varanda",
+    "Gormet": "gourmet",
+    "Vista": "vista",
+    "Livre": "livre",
+    "preço,": "preço?"
+  },
+  "destaques": [
+    "suíte",
+    "Jardim",
+    "Botânico",
+    "gourmet",
+    "imóvel"
+  ],
+  "cartoes": [
+    {
+      "tipo": "numero",
+      "inicio": 2.4,
+      "fim": 4.3,
+      "valor": "120 m²",
+      "rotulo": "de área privativa"
+    },
+    {
+      "tipo": "ficha",
+      "inicio": 4.3,
+      "fim": 7.3,
+      "titulo": "Apartamento",
+      "subtitulo": "pronto para morar",
+      "itens": [
+        [
+          "3",
+          "quartos"
+        ],
+        [
+          "1",
+          "suíte"
+        ],
+        [
+          "2",
+          "vagas"
+        ]
+      ]
+    },
+    {
+      "tipo": "titulo",
+      "inicio": 7.4,
+      "fim": 10.0,
+      "rotulo": "Localização · 5 min do metrô",
+      "titulo": "Jardim Botânico"
+    },
+    {
+      "tipo": "preco",
+      "inicio": 12.3,
+      "fim": 14.7,
+      "rotulo": "Valor de venda",
+      "valor": "R$ 890 mil"
+    },
+    {
+      "tipo": "cta",
+      "inicio": 16.4,
+      "fim": 19.6,
+      "texto": "Comenta",
+      "palavra": "IMÓVEL",
+      "rodape": "e receba o tour completo"
+    }
+  ],
+  "zooms": [
+    {
+      "inicio": 10.1,
+      "fim": 12.2,
+      "escala": 1.1,
+      "suave": true
+    },
+    {
+      "inicio": 12.8,
+      "fim": 14.6,
+      "escala": 1.15
+    }
+  ]
+}

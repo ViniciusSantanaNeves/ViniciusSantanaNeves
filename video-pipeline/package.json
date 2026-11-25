@@ -1,0 +1,20 @@
+{
+  "name": "video-pipeline",
+  "version": "1.0.0",
+  "description": "Pipeline de edição de vídeo: corte de silêncios, transcrição (Whisper) e legendas/cartões animados com HyperFrames, guiado pelo Claude Code.",
+  "scripts": {
+    "editar": "./editar.sh",
+    "doctor": "hyperframes doctor"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "hyperframes": "^0.9.94"
+  },
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  }
+}
