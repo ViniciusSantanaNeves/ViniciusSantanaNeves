@@ -118,12 +118,11 @@ def inicio():
 def analisar(url: str = Form(...), nome: str = Form(""), whatsapp: str = Form("")):
     agora = time.time()
     # limpeza simples de trabalhos antigos (mais de 2 horas)
+    import shutil
     for pasta in TRABALHOS.iterdir():
         try:
             if pasta.is_dir() and agora - pasta.stat().st_mtime > 7200:
-                for f in pasta.iterdir():
-                    f.unlink()
-                pasta.rmdir()
+                shutil.rmtree(pasta, ignore_errors=True)
         except OSError:
             pass
 
@@ -200,3 +199,164 @@ def baixar(trabalho: str):
         raise HTTPException(404, "Análise não encontrada ou expirada.")
     return FileResponse(pdf, filename="Raio-X-Express-33hosts.pdf",
                         media_type="application/pdf")
+
+
+# ===================== ÁREA DA EQUIPE: RAIO-X COMPLETO ======================
+# Protegida pela variável de ambiente RAIOX_EQUIPE_SENHA. Qualquer pessoa da
+# equipe com a senha roda o Raio-X completo (18 blocos, metodologia 33hosts)
+# direto do navegador, sem depender de uma sessão do Claude Code.
+
+import hmac
+import os
+import threading
+
+JOBS: dict = {}          # id -> {"status", "etapa", "erro", "pronto", "placar", "imovel"}
+JOBS_LIMITE = 2          # análises completas simultâneas
+_jobs_ativos = threading.Semaphore(JOBS_LIMITE)
+
+
+def _senha_ok(senha: str) -> bool:
+    certa = os.environ.get("RAIOX_EQUIPE_SENHA", "")
+    return bool(certa) and hmac.compare_digest(senha or "", certa)
+
+
+PAGINA_EQUIPE = """<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Raio-X Completo · Equipe 33hosts</title>
+<style>
+@font-face{font-family:"Linear Grotesk";src:url("/static/fonts/LinearGrotesk-Light.ttf");font-weight:300}
+@font-face{font-family:"Linear Grotesk";src:url("/static/fonts/LinearGrotesk-Regular.ttf");font-weight:400}
+@font-face{font-family:"Linear Grotesk";src:url("/static/fonts/LinearGrotesk-SemiBold.ttf");font-weight:600}
+@font-face{font-family:"Linear Grotesk";src:url("/static/fonts/LinearGrotesk-Black.ttf");font-weight:900}
+*{box-sizing:border-box}
+body{margin:0;background:linear-gradient(180deg,#2C2C2C 0%,#1C1C1C 100%);min-height:100vh;
+ font-family:"Linear Grotesk",Arial,sans-serif;color:#fff;display:flex;flex-direction:column}
+.wrap{max-width:680px;margin:0 auto;padding:48px 24px;flex:1;display:flex;flex-direction:column;justify-content:center}
+.eyebrow{color:#D7C075;font-size:12px;letter-spacing:.18em;font-weight:600;text-transform:uppercase}
+h1{font-weight:900;font-size:44px;line-height:1.0;letter-spacing:-0.02em;margin:18px 0 8px}
+h1 .gold{color:#D7C075}
+.sub{color:#D4D2C8;font-weight:300;font-size:16px;max-width:540px}
+form{margin-top:28px;display:flex;gap:10px;flex-wrap:wrap}
+input{padding:15px 18px;border-radius:999px;border:1.5px solid #333;background:#262626;color:#fff;
+ font:inherit;font-size:15px;outline:none}
+input:focus{border-color:#D7C075}
+button{padding:15px 28px;border-radius:999px;border:0;background:#D7C075;color:#1C1C1C;
+ font:inherit;font-weight:600;font-size:15px;cursor:pointer}
+button:disabled{opacity:.6;cursor:wait}
+.status{margin-top:20px;color:#D7C075;font-size:14px;min-height:20px}
+.erro{margin-top:18px;background:#3a2523;border:1px solid #B4534B;color:#f0d9d6;
+ border-radius:14px;padding:12px 16px;font-size:14px}
+a.botao{display:inline-block;margin-top:16px;padding:15px 28px;border-radius:999px;
+ background:#D7C075;color:#1C1C1C;font-weight:600;text-decoration:none}
+footer{border-top:1px solid #333;color:#78766C;font-size:11px;letter-spacing:.16em;
+ text-transform:uppercase;padding:18px 24px;display:flex;justify-content:space-between}
+footer .slash{color:#D7C075;font-weight:600}
+.nota{color:#78766C;font-size:13px;margin-top:14px;font-weight:300}
+</style></head><body>
+<div class="wrap">
+  <div class="eyebrow">Equipe 33hosts <span style="color:#D7C075">/</span> uso interno</div>
+  <h1>RAIO-X <span class="gold">COMPLETO</span></h1>
+  <p class="sub">Cole o link do anúncio e receba o relatório consultivo completo:
+  18 blocos em 6 fases, análise visual das fotos, radar do algoritmo e plano 30/60/90,
+  no padrão oficial 33hosts.</p>
+  <form id="f">
+    <input type="password" name="senha" required placeholder="Senha da equipe" style="flex:1;min-width:160px">
+    <input type="url" name="url" required placeholder="Link do anúncio no Airbnb" style="flex-basis:100%">
+    <button type="submit" id="btn">Rodar o Raio-X completo</button>
+  </form>
+  <p class="status" id="status"></p>
+  <div id="saida"></div>
+  <p class="nota">A análise completa leva de 3 a 6 minutos. Mantenha esta página aberta.</p>
+</div>
+<footer><span>Anfitriões profissionais.</span>
+<span>Raio-X do Anúncio <span class="slash">/</span> 33hosts</span></footer>
+<script>
+const f=document.getElementById('f'),st=document.getElementById('status'),
+      sa=document.getElementById('saida'),btn=document.getElementById('btn');
+f.addEventListener('submit',async(e)=>{
+  e.preventDefault();btn.disabled=true;sa.innerHTML='';st.textContent='Enviando...';
+  const fd=new FormData(f);
+  const r=await fetch('/equipe/analisar',{method:'POST',body:fd});
+  const j=await r.json();
+  if(!r.ok){st.textContent='';sa.innerHTML='<div class="erro">'+(j.detail||'Erro ao iniciar.')+'</div>';btn.disabled=false;return;}
+  const id=j.job, senha=encodeURIComponent(fd.get('senha'));
+  const timer=setInterval(async()=>{
+    const r2=await fetch('/equipe/status/'+id+'?senha='+senha);
+    const s=await r2.json();
+    if(!r2.ok){clearInterval(timer);st.textContent='';sa.innerHTML='<div class="erro">'+(s.detail||'Erro.')+'</div>';btn.disabled=false;return;}
+    st.textContent=s.etapa||'';
+    if(s.status==='erro'){clearInterval(timer);st.textContent='';
+      sa.innerHTML='<div class="erro">'+s.erro+'</div>';btn.disabled=false;}
+    if(s.status==='pronto'){clearInterval(timer);
+      st.textContent='Pronto: '+(s.imovel||'')+' · placar '+s.placar;
+      sa.innerHTML='<a class="botao" href="/equipe/baixar/'+id+'?senha='+senha+'">Baixar o PDF completo</a>';
+      btn.disabled=false;}
+  },4000);
+});
+</script></body></html>"""
+
+
+@app.get("/equipe", response_class=HTMLResponse)
+def equipe():
+    if not os.environ.get("RAIOX_EQUIPE_SENHA"):
+        return HTMLResponse("<p style='font-family:sans-serif;padding:40px'>Área da equipe desativada: "
+                            "defina a variável de ambiente <b>RAIOX_EQUIPE_SENHA</b> no servidor.</p>")
+    return PAGINA_EQUIPE
+
+
+def _rodar_job(job: str, url: str):
+    import raiox_completo
+    pasta = TRABALHOS / job
+    try:
+        def _prog(msg):
+            JOBS[job]["etapa"] = msg
+        resultado = raiox_completo.executar(url, pasta, progresso=_prog)
+        p = resultado["placar"]
+        JOBS[job].update(status="pronto", etapa="Pronto.",
+                         imovel=resultado["imovel"],
+                         placar=f"{p['OK']} OK / {p['AJUSTE']} ajuste / {p['CRITICO']} críticos / {p['PEND']} painel")
+    except raiox_completo.ErroRaioX as e:
+        JOBS[job].update(status="erro", erro=str(e))
+    except Exception:
+        JOBS[job].update(status="erro",
+                         erro="Falha inesperada na análise. Tente novamente; se persistir, avise o responsável.")
+    finally:
+        _jobs_ativos.release()
+
+
+@app.post("/equipe/analisar")
+def equipe_analisar(url: str = Form(...), senha: str = Form(...)):
+    if not _senha_ok(senha):
+        raise HTTPException(403, "Senha incorreta.")
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        raise HTTPException(500, "ANTHROPIC_API_KEY não está configurada no servidor.")
+    if not _jobs_ativos.acquire(blocking=False):
+        raise HTTPException(429, "Já existem análises completas em andamento. Aguarde alguns minutos.")
+    job = uuid.uuid4().hex[:12]
+    (TRABALHOS / job).mkdir(parents=True, exist_ok=True)
+    JOBS[job] = {"status": "rodando", "etapa": "Iniciando...", "erro": "", "imovel": "", "placar": ""}
+    threading.Thread(target=_rodar_job, args=(job, url), daemon=True).start()
+    return {"job": job}
+
+
+@app.get("/equipe/status/{job}")
+def equipe_status(job: str, senha: str = ""):
+    if not _senha_ok(senha):
+        raise HTTPException(403, "Senha incorreta.")
+    info = JOBS.get(job)
+    if not info:
+        raise HTTPException(404, "Análise não encontrada (o servidor pode ter reiniciado).")
+    return info
+
+
+@app.get("/equipe/baixar/{job}")
+def equipe_baixar(job: str, senha: str = ""):
+    if not _senha_ok(senha):
+        raise HTTPException(403, "Senha incorreta.")
+    if not re.fullmatch(r"[0-9a-f]{12}", job):
+        raise HTTPException(404)
+    pdf = TRABALHOS / job / "raiox-completo.pdf"
+    if not pdf.exists():
+        raise HTTPException(404, "PDF não encontrado ou expirado.")
+    nome = "Raio-X-do-Anuncio-33hosts.pdf"
+    return FileResponse(pdf, filename=nome, media_type="application/pdf")

@@ -22,6 +22,24 @@ GHL_WEBHOOK_URL=https://...       # opcional, envia cada lead para o GoHighLevel
 CHROME_PATH=/usr/bin/chromium     # caminho do Chromium (o Docker já configura)
 ```
 
+## Raio-X completo para a equipe (novo)
+
+Além do Raio-X Express (gratuito, motor de regras), o site tem uma **área interna da equipe** em `/equipe` que roda o **Raio-X do Anúncio completo**: 18 blocos em 6 fases, análise visual das fotos pela IA, radar de mudanças do algoritmo do Airbnb (com busca na web e cache de 7 dias), auditoria de completude, aplicações prontas e plano 30/60/90, tudo no PDF oficial do design system 33hosts. Não depende do Claude Code: qualquer pessoa da equipe com a senha roda direto do navegador.
+
+**Como ativar:**
+
+1. Defina `ANTHROPIC_API_KEY` (obrigatória para o completo).
+2. Defina `RAIOX_EQUIPE_SENHA` com a senha que a equipe vai usar (sem ela, a área fica desativada).
+3. Acesse `https://seu-site/equipe`, informe a senha e cole o link do anúncio. A análise leva de 3 a 6 minutos e o PDF sai na própria página.
+
+```
+ANTHROPIC_API_KEY=sk-ant-...        # obrigatória para o Raio-X completo
+RAIOX_EQUIPE_SENHA=uma-senha-forte  # libera a área /equipe
+MODELO_RAIOX=claude-opus-5-5        # opcional, este é o padrão
+```
+
+Custo aproximado por análise completa (modelo padrão): US$ 0,25 a 0,45, dominado pelas fotos enviadas para a análise visual e pelo tamanho do relatório. O radar com busca na web roda no máximo 1 vez por semana e custa centavos. A metodologia (regras de escrita, benchmarks, blocos e radar-base) fica em `metodologia.py`; para ajustar o comportamento do relatório é lá que se edita.
+
 ## Captação de leads no GHL (GoHighLevel)
 
 O formulário pede **nome e WhatsApp** antes de liberar a análise. Se você configurar a variável `GHL_WEBHOOK_URL`, cada análise envia o lead automaticamente para o seu GHL, já com a tag `avaliacao-nova`.
@@ -82,11 +100,14 @@ O projeto tem `Dockerfile`, então qualquer serviço que rode Docker funciona:
 
 ```
 raiox-web/
-├── app.py          # site (FastAPI): página inicial, análise e download
-├── scraper.py      # leitura dos dados públicos do anúncio
-├── analise.py      # motor de regras + camada opcional de IA
-├── relatorio.py    # relatório HTML no design system + geração do PDF
-├── static/fonts/   # Linear Grotesk (fonte da marca)
+├── app.py                 # site (FastAPI): página pública, área da equipe, downloads
+├── scraper.py             # leitura dos dados públicos do anúncio
+├── analise.py             # motor de regras do Express + camada opcional de IA
+├── relatorio.py           # PDF do Raio-X Express
+├── metodologia.py         # metodologia oficial do Raio-X completo (prompt + esquema + radar-base)
+├── raiox_completo.py      # orquestrador do Raio-X completo (coleta, radar, análise com IA)
+├── relatorio_completo.py  # PDF completo no design system (capa full-bleed, 18 blocos)
+├── static/fonts/          # Linear Grotesk (fonte da marca)
 ├── requirements.txt
 ├── Dockerfile
 └── README.md
