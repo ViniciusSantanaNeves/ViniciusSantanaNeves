@@ -1,0 +1,9 @@
+# arquivos de audio baixados (temporarios) e resultados nao vao para o git
+audios/
+transcricoes/
+*.mp3
+*.m4a
+
+# cache do python
+__pycache__/
+*.pyc

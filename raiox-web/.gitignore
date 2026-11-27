@@ -1,0 +1,4 @@
+trabalhos/
+__pycache__/
+*.pyc
+nohup.out

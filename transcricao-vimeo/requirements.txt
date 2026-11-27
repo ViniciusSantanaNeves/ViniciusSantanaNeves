@@ -1,0 +1,9 @@
+# Baixa o audio dos videos do Vimeo (com seu acesso)
+yt-dlp>=2024.1.0
+
+# Motor de transcricao local (padrao) - roda no seu PC, de graca
+faster-whisper>=1.0.0
+
+# Motor de transcricao opcional pela API da OpenAI (MOTOR=openai)
+# Descomente se for usar a API paga em vez do modelo local:
+# openai>=1.0.0
